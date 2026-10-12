@@ -1,0 +1,816 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Setup Cards</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><circle cx='50' cy='50' r='46' fill='%23e8a33d'/><circle cx='50' cy='50' r='14' fill='%23161513'/></svg>">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Space+Grotesk:wght@500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<script src="https://cdn.tailwindcss.com/3.4.17"></script>
+<style>
+  html, body { margin: 0; background: #161513; min-height: 100%; }
+  body { font-family: 'Inter', system-ui, sans-serif; }
+  .ls-font-display { font-family: 'Space Grotesk', system-ui, sans-serif; }
+  .ls-font-mono { font-family: 'JetBrains Mono', ui-monospace, monospace; }
+  .ls-font-body { font-family: 'Inter', system-ui, sans-serif; }
+  .ls-flip-scene { perspective: 1800px; }
+  .ls-flip-card {
+    transition: transform 0.55s cubic-bezier(0.65, 0.05, 0.36, 1);
+    transform-style: preserve-3d;
+  }
+  .ls-flip-card.is-flipped { transform: rotateY(180deg); }
+  .ls-face {
+    backface-visibility: hidden;
+    -webkit-backface-visibility: hidden;
+    transition: visibility 0s linear 0.28s;
+  }
+  .ls-face[data-hidden="true"] { visibility: hidden; pointer-events: none; }
+  .ls-face-back { transform: rotateY(180deg); }
+  .ls-scroll::-webkit-scrollbar { width: 5px; }
+  .ls-scroll::-webkit-scrollbar-thumb { background: #3a362f; border-radius: 4px; }
+  button:focus-visible, input:focus-visible, textarea:focus-visible { outline: 2px solid #e8a33d; outline-offset: 2px; }
+  @media (prefers-reduced-motion: reduce) {
+    .ls-flip-card { transition: none; }
+    .ls-face { transition: none; }
+  }
+</style>
+</head>
+<body>
+<div id="root"></div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.3.1/umd/react.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.3.1/umd/react-dom.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.24.7/babel.min.js"></script>
+
+<script type="text/babel">
+const { useState, useEffect, useRef, useCallback } = React;
+
+// ---- icons (inline, so no extra library is needed) ----------------
+
+const ICONS = {
+  plus: <><path d="M5 12h14" /><path d="M12 5v14" /></>,
+  trash: <><path d="M3 6h18" /><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6" /><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2" /><line x1="10" x2="10" y1="11" y2="17" /><line x1="14" x2="14" y1="11" y2="17" /></>,
+  left: <path d="m15 18-6-6 6-6" />,
+  right: <path d="m9 18 6-6-6-6" />,
+  sun: <><circle cx="12" cy="12" r="4" /><path d="M12 2v2" /><path d="M12 20v2" /><path d="m4.93 4.93 1.41 1.41" /><path d="m17.66 17.66 1.41 1.41" /><path d="M2 12h2" /><path d="M20 12h2" /><path d="m6.34 17.66-1.41 1.41" /><path d="m19.07 4.93-1.41 1.41" /></>,
+  rotate: <><path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8" /><path d="M21 3v5h-5" /></>,
+  download: <><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><polyline points="7 10 12 15 17 10" /><line x1="12" x2="12" y1="15" y2="3" /></>,
+  upload: <><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><polyline points="17 8 12 3 7 8" /><line x1="12" x2="12" y1="3" y2="15" /></>,
+};
+
+function Icon({ name, size = 16, strokeWidth = 2, className = "" }) {
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={strokeWidth}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className={className}
+      aria-hidden="true"
+    >
+      {ICONS[name]}
+    </svg>
+  );
+}
+
+// ---- helpers -------------------------------------------------
+
+const uid = () => Math.random().toString(36).slice(2, 10);
+
+const emptyLight = () => ({
+  id: uid(),
+  colorMode: "cct", // "cct" (kelvin) or "rgb" (hue/saturation)
+  kelvin: 5600,
+  dim: 75,
+  hue: 0,
+  saturation: 0,
+  position: "",
+});
+
+const emptySetup = () => ({
+  id: uid(),
+  title: "",
+  image: null, // base64 data url
+  camera: "iphone-cinematic",
+  lens: "",
+  subjectNote: "",
+  lights: [emptyLight()],
+  createdAt: Date.now(),
+});
+
+const CAMERA_OPTIONS = [
+  { value: "iphone-normal", label: "iPhone — Normal" },
+  { value: "iphone-cinematic", label: "iPhone — Cinematic" },
+  { value: "blackmagic", label: "Blackmagic Camera" },
+  { value: "sony-a6000", label: "Sony A6000" },
+];
+
+const LENS_OPTIONS = [
+  { value: "meike-25mm", label: "Meike 25mm" },
+  { value: "meike-50mm", label: "Meike 50mm" },
+  { value: "sony-kit-1650mm", label: "Sony kit 16–50mm" },
+];
+
+const CAMERAS_WITH_LENS = ["sony-a6000"];
+
+const cameraLabel = (v) => CAMERA_OPTIONS.find((o) => o.value === v)?.label || v;
+const lensLabel = (v) => LENS_OPTIONS.find((o) => o.value === v)?.label || v;
+
+// Rough kelvin -> swatch color, just for a visual cue on the dial
+function kelvinToColor(k) {
+  const t = Math.max(2700, Math.min(10000, k));
+  const stops = [
+    { k: 2700, c: [255, 180, 96] },
+    { k: 5600, c: [255, 244, 229] },
+    { k: 10000, c: [200, 220, 255] },
+  ];
+  let a = stops[0], b = stops[1];
+  if (t > 5600) { a = stops[1]; b = stops[2]; }
+  const span = b.k - a.k;
+  const f = span === 0 ? 0 : (t - a.k) / span;
+  const c = a.c.map((v, i) => Math.round(v + (b.c[i] - v) * f));
+  return `rgb(${c[0]}, ${c[1]}, ${c[2]})`;
+}
+
+// Swatch reflects RGB mode (hue/saturation) when the light is in RGB mode,
+// otherwise falls back to the kelvin/CCT look.
+function lightSwatchColor(light) {
+  if (light.colorMode === "rgb") {
+    const sat = Math.max(0, Math.min(100, light.saturation));
+    const lightness = 88 - (sat / 100) * 38;
+    const chroma = Math.max(6, sat);
+    return `hsl(${light.hue}, ${chroma}%, ${lightness}%)`;
+  }
+  return kelvinToColor(light.kelvin);
+}
+
+// Shrink big camera photos so many cards fit in browser storage.
+function resizeImage(file, maxSide = 1400, quality = 0.82) {
+  return new Promise((resolve, reject) => {
+    const url = URL.createObjectURL(file);
+    const img = new Image();
+    img.onload = () => {
+      const scale = Math.min(1, maxSide / Math.max(img.width, img.height));
+      const canvas = document.createElement("canvas");
+      canvas.width = Math.round(img.width * scale);
+      canvas.height = Math.round(img.height * scale);
+      canvas.getContext("2d").drawImage(img, 0, 0, canvas.width, canvas.height);
+      URL.revokeObjectURL(url);
+      resolve(canvas.toDataURL("image/jpeg", quality));
+    };
+    img.onerror = () => {
+      URL.revokeObjectURL(url);
+      reject(new Error("Could not read that image"));
+    };
+    img.src = url;
+  });
+}
+
+// ---- storage (browser localStorage) ------------------------------
+
+const STORAGE_KEY = "setups_v1";
+
+// Fill in any fields that older cards may be missing.
+function normalizeSetup(s) {
+  const base = emptySetup();
+  const lights = Array.isArray(s.lights) && s.lights.length ? s.lights : [emptyLight()];
+  return {
+    ...base,
+    ...s,
+    id: s.id || base.id,
+    lens: s.lens || "",
+    lights: lights.map((l) => ({ ...emptyLight(), ...l, id: l.id || uid() })),
+  };
+}
+
+function loadSetups() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return [];
+    return parsed.map(normalizeSetup);
+  } catch (e) {
+    return [];
+  }
+}
+
+function saveSetups(setups) {
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(setups));
+    return true;
+  } catch (e) {
+    console.error("Failed to save setups", e);
+    return false;
+  }
+}
+
+// ---- main component -------------------------------------------------
+
+function App() {
+  const [setups, setSetups] = useState([]);
+  const [activeIndex, setActiveIndex] = useState(0);
+  const [flipped, setFlipped] = useState(false);
+  const [loaded, setLoaded] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [cameraPickerOpen, setCameraPickerOpen] = useState(false);
+  const [notice, setNotice] = useState("");
+  const fileInputRef = useRef(null);
+  const importInputRef = useRef(null);
+  const saveTimer = useRef(null);
+  const noticeTimer = useRef(null);
+
+  const flash = (msg) => {
+    setNotice(msg);
+    clearTimeout(noticeTimer.current);
+    noticeTimer.current = setTimeout(() => setNotice(""), 4000);
+  };
+
+  useEffect(() => {
+    const data = loadSetups();
+    setSetups(data.length ? data : [emptySetup()]);
+    setLoaded(true);
+  }, []);
+
+  // debounce-save whenever setups change, after initial load
+  useEffect(() => {
+    if (!loaded) return;
+    clearTimeout(saveTimer.current);
+    saveTimer.current = setTimeout(() => {
+      const ok = saveSetups(setups);
+      if (!ok) flash("Browser storage is full. Export a backup and delete some cards.");
+    }, 350);
+    return () => clearTimeout(saveTimer.current);
+  }, [setups, loaded]);
+
+  const active = setups[activeIndex];
+
+  const updateActive = useCallback((patch) => {
+    setSetups((prev) => prev.map((s, i) => (i === activeIndex ? { ...s, ...patch } : s)));
+  }, [activeIndex]);
+
+  const updateLight = (lightId, patch) => {
+    updateActive({
+      lights: active.lights.map((l) => (l.id === lightId ? { ...l, ...patch } : l)),
+    });
+  };
+
+  const addLight = () => {
+    if (active.lights.length >= 6) return;
+    updateActive({ lights: [...active.lights, emptyLight()] });
+  };
+
+  const removeLight = (lightId) => {
+    updateActive({ lights: active.lights.filter((l) => l.id !== lightId) });
+  };
+
+  const handleImageFile = async (file) => {
+    if (!file) return;
+    try {
+      const dataUrl = await resizeImage(file);
+      updateActive({ image: dataUrl });
+    } catch (e) {
+      flash("That file couldn't be read as an image.");
+    }
+  };
+
+  const addSetup = () => {
+    const fresh = emptySetup();
+    setSetups((prev) => [...prev, fresh]);
+    setActiveIndex(setups.length);
+    setFlipped(false);
+    setCameraPickerOpen(false);
+  };
+
+  const deleteSetup = () => {
+    setSetups((prev) => {
+      const next = prev.filter((_, i) => i !== activeIndex);
+      return next.length ? next : [emptySetup()];
+    });
+    setActiveIndex((i) => Math.max(0, i - 1));
+    setFlipped(false);
+    setConfirmDelete(false);
+  };
+
+  const goTo = useCallback((delta) => {
+    setFlipped(false);
+    setCameraPickerOpen(false);
+    setConfirmDelete(false);
+    setActiveIndex((i) => {
+      const next = i + delta;
+      if (next < 0) return setups.length - 1;
+      if (next >= setups.length) return 0;
+      return next;
+    });
+  }, [setups.length]);
+
+  // keyboard: left/right arrows move between cards (not while typing)
+  useEffect(() => {
+    const onKey = (e) => {
+      const tag = (e.target && e.target.tagName) || "";
+      if (tag === "INPUT" || tag === "TEXTAREA") return;
+      if (e.key === "ArrowLeft") goTo(-1);
+      if (e.key === "ArrowRight") goTo(1);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [goTo]);
+
+  // ---- backup: export / import ----
+  const exportBackup = () => {
+    const payload = { app: "setup-cards", version: 1, exportedAt: new Date().toISOString(), setups };
+    const blob = new Blob([JSON.stringify(payload)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `setup-cards-backup-${new Date().toISOString().slice(0, 10)}.json`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+    flash("Backup downloaded.");
+  };
+
+  const importBackup = (file) => {
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      try {
+        const parsed = JSON.parse(reader.result);
+        const incoming = Array.isArray(parsed) ? parsed : parsed.setups;
+        if (!Array.isArray(incoming) || incoming.length === 0) throw new Error("empty");
+        const cleaned = incoming.map(normalizeSetup);
+        setSetups((prev) => {
+          // keep existing cards, replace ones with the same id, add the rest
+          const byId = new Map(prev.map((s) => [s.id, s]));
+          cleaned.forEach((s) => byId.set(s.id, s));
+          // drop the blank starter card if it was untouched
+          const merged = Array.from(byId.values()).filter(
+            (s) => s.title || s.image || cleaned.some((c) => c.id === s.id) || prev.length > 1
+          );
+          return merged.length ? merged : cleaned;
+        });
+        setActiveIndex(0);
+        setFlipped(false);
+        flash(`Imported ${cleaned.length} card${cleaned.length !== 1 ? "s" : ""}.`);
+      } catch (e) {
+        flash("That file isn't a Setup Cards backup.");
+      }
+    };
+    reader.readAsText(file);
+  };
+
+  if (!loaded || !active) {
+    return (
+      <div className="w-full min-h-screen flex items-center justify-center bg-[#161513]">
+        <div className="text-[#8a8378] text-sm tracking-wide">loading setups…</div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="w-full min-h-screen bg-[#161513] flex flex-col items-center py-6 sm:py-10 px-4 ls-font-body">
+      {/* header / nav */}
+      <div className="w-full max-w-[520px] flex items-center justify-between mb-5">
+        <div className="flex items-center gap-2">
+          <div className="w-7 h-7 rounded-full bg-[#e8a33d] flex items-center justify-center">
+            <Icon name="sun" size={14} strokeWidth={2.5} className="text-[#161513]" />
+          </div>
+          <span className="ls-font-display text-[#f0ece2] text-[15px] font-semibold tracking-tight">
+            Setup Cards
+          </span>
+          <span className="ls-font-mono text-[9px] text-[#e8a33d] border border-[#e8a33d]/40 rounded-full px-1.5 py-0.5 tracking-wider">
+            v1
+          </span>
+        </div>
+        <div className="ls-font-mono text-[11px] text-[#8a8378] tracking-wider">
+          {String(activeIndex + 1).padStart(2, "0")} / {String(setups.length).padStart(2, "0")}
+        </div>
+      </div>
+
+      {/* card */}
+      <div
+        className="ls-flip-scene w-full max-w-[520px]"
+        style={{ height: "min(640px, max(540px, calc(100dvh - 230px)))" }}
+      >
+        <div className={`ls-flip-card relative w-full h-full ${flipped ? "is-flipped" : ""}`}>
+          {/* FRONT */}
+          <div data-hidden={flipped} className="ls-face absolute inset-0 rounded-[20px] overflow-hidden bg-[#1f1d18] border border-[#34302a] flex flex-col">
+            <div className="relative flex-1 bg-[#0f0e0c] flex items-center justify-center overflow-hidden">
+              {active.image ? (
+                <img
+                  src={active.image}
+                  alt={active.title || "Lighting setup"}
+                  onClick={() => setFlipped(true)}
+                  className="w-full h-full object-cover cursor-pointer"
+                />
+              ) : (
+                <button
+                  onClick={() => fileInputRef.current?.click()}
+                  className="flex flex-col items-center gap-3 text-[#8a8378] hover:text-[#e8a33d] transition-colors"
+                >
+                  <div className="w-14 h-14 rounded-full border border-dashed border-[#4a453c] flex items-center justify-center">
+                    <Icon name="plus" size={20} />
+                  </div>
+                  <span className="ls-font-body text-[13px]">Add a photo</span>
+                </button>
+              )}
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/*"
+                className="hidden"
+                onChange={(e) => { handleImageFile(e.target.files?.[0]); e.target.value = ""; }}
+              />
+              {active.image && (
+                <button
+                  onClick={() => fileInputRef.current?.click()}
+                  className="absolute top-3 right-3 bg-black/55 backdrop-blur-sm text-[#f0ece2] text-[11px] ls-font-mono px-2.5 py-1.5 rounded-full hover:bg-black/75 transition-colors"
+                >
+                  replace
+                </button>
+              )}
+              <div className="absolute bottom-3 left-3 right-3 flex items-center justify-between">
+                <span className="ls-font-mono text-[10px] tracking-wider text-[#f0ece2]/70 bg-black/40 px-2 py-1 rounded-full backdrop-blur-sm">
+                  {active.lights.length} light{active.lights.length !== 1 ? "s" : ""} · {cameraLabel(active.camera)}
+                  {active.lens ? ` · ${lensLabel(active.lens)}` : ""}
+                </span>
+              </div>
+            </div>
+
+            <div className="px-5 py-4 border-t border-[#34302a]">
+              <input
+                value={active.title}
+                onChange={(e) => updateActive({ title: e.target.value })}
+                placeholder="Untitled setup"
+                aria-label="Setup title"
+                className="ls-font-display w-full bg-transparent text-[#f0ece2] text-[17px] font-semibold tracking-tight outline-none placeholder:text-[#5c574d]"
+              />
+              <button
+                onClick={() => setFlipped(true)}
+                className="mt-2 flex items-center gap-1.5 text-[#e8a33d] ls-font-mono text-[11px] tracking-wide hover:gap-2.5 transition-all"
+              >
+                <Icon name="rotate" size={12} />
+                view settings
+              </button>
+            </div>
+          </div>
+
+          {/* BACK */}
+          <div data-hidden={!flipped} className="ls-face ls-face-back absolute inset-0 rounded-[20px] overflow-hidden bg-[#1f1d18] border border-[#34302a] flex flex-col">
+            <div className="px-5 pt-4 pb-3 border-b border-[#34302a] flex items-center justify-between shrink-0">
+              <span className="ls-font-display text-[#f0ece2] text-[14px] font-semibold truncate pr-2">
+                {active.title || "Untitled setup"}
+              </span>
+              <button
+                onClick={() => setFlipped(false)}
+                className="flex items-center gap-1 text-[#8a8378] ls-font-mono text-[11px] hover:text-[#e8a33d] transition-colors shrink-0"
+              >
+                <Icon name="rotate" size={12} />
+                photo
+              </button>
+            </div>
+
+            <div className="flex-1 overflow-y-auto ls-scroll px-5 py-4 space-y-5">
+              {/* camera */}
+              <div>
+                <div className="ls-font-mono text-[10px] tracking-[0.12em] text-[#8a8378] uppercase mb-2">
+                  Camera
+                </div>
+                {!cameraPickerOpen ? (
+                  <button
+                    onClick={() => setCameraPickerOpen(true)}
+                    className="w-full flex items-center justify-between px-3 py-2 rounded-lg border border-[#e8a33d] bg-[#e8a33d]/10 text-[#f0ece2] ls-font-body text-[13px]"
+                  >
+                    <span>{cameraLabel(active.camera)}</span>
+                    <span className="ls-font-mono text-[10px] text-[#e8a33d]">change</span>
+                  </button>
+                ) : (
+                  <div className="grid grid-cols-1 gap-1.5">
+                    {CAMERA_OPTIONS.map((opt) => (
+                      <button
+                        key={opt.value}
+                        onClick={() => {
+                          const needsLens = CAMERAS_WITH_LENS.includes(opt.value);
+                          updateActive({
+                            camera: opt.value,
+                            lens: needsLens ? (active.lens || LENS_OPTIONS[0].value) : "",
+                          });
+                          setCameraPickerOpen(false);
+                        }}
+                        className={`text-left px-3 py-2 rounded-lg border ls-font-body text-[13px] transition-colors ${
+                          active.camera === opt.value
+                            ? "border-[#e8a33d] bg-[#e8a33d]/10 text-[#f0ece2]"
+                            : "border-[#34302a] text-[#a8a195] hover:border-[#4a453c]"
+                        }`}
+                      >
+                        {opt.label}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* lens, only for cameras that take one */}
+              {CAMERAS_WITH_LENS.includes(active.camera) && (
+                <div>
+                  <div className="ls-font-mono text-[10px] tracking-[0.12em] text-[#8a8378] uppercase mb-2">
+                    Lens
+                  </div>
+                  <div className="grid grid-cols-1 gap-1.5">
+                    {LENS_OPTIONS.map((opt) => (
+                      <button
+                        key={opt.value}
+                        onClick={() => updateActive({ lens: opt.value })}
+                        className={`text-left px-3 py-2 rounded-lg border ls-font-body text-[13px] transition-colors ${
+                          active.lens === opt.value
+                            ? "border-[#e8a33d] bg-[#e8a33d]/10 text-[#f0ece2]"
+                            : "border-[#34302a] text-[#a8a195] hover:border-[#4a453c]"
+                        }`}
+                      >
+                        {opt.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* subject position */}
+              <div>
+                <div className="ls-font-mono text-[10px] tracking-[0.12em] text-[#8a8378] uppercase mb-2">
+                  Subject
+                </div>
+                <textarea
+                  value={active.subjectNote}
+                  onChange={(e) => updateActive({ subjectNote: e.target.value })}
+                  placeholder="e.g. seated in chair, facing camera, 3ft from backdrop"
+                  rows={2}
+                  className="w-full bg-[#161513] border border-[#34302a] rounded-lg px-3 py-2 text-[13px] ls-font-body text-[#f0ece2] outline-none focus:border-[#e8a33d] placeholder:text-[#5c574d] resize-none"
+                />
+              </div>
+
+              {/* lights */}
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <span className="ls-font-mono text-[10px] tracking-[0.12em] text-[#8a8378] uppercase">
+                    Lights
+                  </span>
+                  <button
+                    onClick={addLight}
+                    disabled={active.lights.length >= 6}
+                    className="flex items-center gap-1 ls-font-mono text-[10px] text-[#e8a33d] disabled:text-[#5c574d] disabled:cursor-not-allowed hover:gap-1.5 transition-all"
+                  >
+                    <Icon name="plus" size={11} /> add light
+                  </button>
+                </div>
+
+                <div className="space-y-2.5">
+                  {active.lights.map((light, idx) => (
+                    <div key={light.id} className="rounded-xl border border-[#34302a] bg-[#161513] p-3">
+                      <div className="flex items-center justify-between mb-2.5">
+                        <div className="flex items-center gap-2">
+                          <span
+                            className="w-2.5 h-2.5 rounded-full shrink-0"
+                            style={{ backgroundColor: lightSwatchColor(light) }}
+                          />
+                          <span className="ls-font-mono text-[11px] text-[#a8a195]">
+                            Light {idx + 1}
+                          </span>
+                        </div>
+                        {active.lights.length > 1 && (
+                          <button
+                            onClick={() => removeLight(light.id)}
+                            aria-label={`Remove light ${idx + 1}`}
+                            className="text-[#5c574d] hover:text-[#c4584a] transition-colors"
+                          >
+                            <Icon name="trash" size={12} />
+                          </button>
+                        )}
+                      </div>
+
+                      <div className="flex items-center gap-1 mb-2.5 p-0.5 rounded-md bg-[#0f0e0c] border border-[#2a2722] w-fit">
+                        <button
+                          onClick={() => updateLight(light.id, { colorMode: "cct" })}
+                          className={`ls-font-mono text-[10px] px-2.5 py-1 rounded-[5px] transition-colors ${
+                            light.colorMode === "cct"
+                              ? "bg-[#e8a33d] text-[#161513]"
+                              : "text-[#8a8378] hover:text-[#a8a195]"
+                          }`}
+                        >
+                          regular
+                        </button>
+                        <button
+                          onClick={() => updateLight(light.id, { colorMode: "rgb" })}
+                          className={`ls-font-mono text-[10px] px-2.5 py-1 rounded-[5px] transition-colors ${
+                            light.colorMode === "rgb"
+                              ? "bg-[#e8a33d] text-[#161513]"
+                              : "text-[#8a8378] hover:text-[#a8a195]"
+                          }`}
+                        >
+                          RGB
+                        </button>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-2.5 mb-2.5">
+                        {light.colorMode === "cct" ? (
+                          <div className="col-span-2">
+                            <div className="flex items-center justify-between mb-1">
+                              <label className="ls-font-mono text-[9px] text-[#8a8378] tracking-wide">KELVIN</label>
+                              <span className="ls-font-mono text-[10px] text-[#f0ece2]">{light.kelvin}K</span>
+                            </div>
+                            <input
+                              type="range"
+                              min={2700}
+                              max={10000}
+                              step={100}
+                              value={light.kelvin}
+                              onChange={(e) => updateLight(light.id, { kelvin: Number(e.target.value) })}
+                              className="w-full h-1 accent-[#e8a33d]"
+                            />
+                          </div>
+                        ) : (
+                          <>
+                            <div>
+                              <div className="flex items-center justify-between mb-1">
+                                <label className="ls-font-mono text-[9px] text-[#8a8378] tracking-wide">HUE</label>
+                                <span className="ls-font-mono text-[10px] text-[#f0ece2]">{light.hue}°</span>
+                              </div>
+                              <input
+                                type="range"
+                                min={0}
+                                max={360}
+                                step={1}
+                                value={light.hue}
+                                onChange={(e) => updateLight(light.id, { hue: Number(e.target.value) })}
+                                className="w-full h-1"
+                                style={{ accentColor: `hsl(${light.hue}, 80%, 55%)` }}
+                              />
+                            </div>
+                            <div>
+                              <div className="flex items-center justify-between mb-1">
+                                <label className="ls-font-mono text-[9px] text-[#8a8378] tracking-wide">SATURATION</label>
+                                <span className="ls-font-mono text-[10px] text-[#f0ece2]">{light.saturation}%</span>
+                              </div>
+                              <input
+                                type="range"
+                                min={0}
+                                max={100}
+                                step={1}
+                                value={light.saturation}
+                                onChange={(e) => updateLight(light.id, { saturation: Number(e.target.value) })}
+                                className="w-full h-1 accent-[#e8a33d]"
+                              />
+                            </div>
+                          </>
+                        )}
+                        <div>
+                          <div className="flex items-center justify-between mb-1">
+                            <label className="ls-font-mono text-[9px] text-[#8a8378] tracking-wide">DIM</label>
+                            <span className="ls-font-mono text-[10px] text-[#f0ece2]">{light.dim}%</span>
+                          </div>
+                          <input
+                            type="range"
+                            min={0}
+                            max={100}
+                            step={1}
+                            value={light.dim}
+                            onChange={(e) => updateLight(light.id, { dim: Number(e.target.value) })}
+                            className="w-full h-1 accent-[#e8a33d]"
+                          />
+                        </div>
+                      </div>
+
+                      <input
+                        value={light.position}
+                        onChange={(e) => updateLight(light.id, { position: e.target.value })}
+                        placeholder="position, e.g. 45° camera-left, key"
+                        aria-label={`Light ${idx + 1} position`}
+                        className="w-full bg-transparent border-b border-[#34302a] pb-1 text-[12px] ls-font-body text-[#f0ece2] outline-none focus:border-[#e8a33d] placeholder:text-[#5c574d]"
+                      />
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            <div className="px-5 py-3 border-t border-[#34302a] flex items-center justify-between shrink-0">
+              {confirmDelete ? (
+                <div className="flex items-center gap-2 w-full justify-between">
+                  <span className="ls-font-body text-[12px] text-[#c4584a]">Delete this card?</span>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => setConfirmDelete(false)}
+                      className="ls-font-mono text-[11px] text-[#8a8378] px-2 py-1"
+                    >
+                      cancel
+                    </button>
+                    <button
+                      onClick={deleteSetup}
+                      className="ls-font-mono text-[11px] text-[#c4584a] px-2 py-1 border border-[#c4584a]/40 rounded-md"
+                    >
+                      delete
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <button
+                  onClick={() => setConfirmDelete(true)}
+                  className="flex items-center gap-1.5 ls-font-mono text-[11px] text-[#5c574d] hover:text-[#c4584a] transition-colors"
+                >
+                  <Icon name="trash" size={12} /> delete card
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* card navigation */}
+      <div className="w-full max-w-[520px] flex items-center justify-between mt-5">
+        <button
+          onClick={() => goTo(-1)}
+          disabled={setups.length < 2}
+          aria-label="Previous card"
+          className="w-9 h-9 rounded-full border border-[#34302a] flex items-center justify-center text-[#a8a195] disabled:opacity-30 hover:border-[#e8a33d] hover:text-[#e8a33d] transition-colors"
+        >
+          <Icon name="left" size={16} />
+        </button>
+
+        <div className="flex gap-1.5 flex-wrap justify-center px-2">
+          {setups.map((s, i) => (
+            <button
+              key={s.id}
+              aria-label={`Go to card ${i + 1}`}
+              onClick={() => { setActiveIndex(i); setFlipped(false); setCameraPickerOpen(false); setConfirmDelete(false); }}
+              className={`h-1.5 rounded-full transition-all ${
+                i === activeIndex ? "w-6 bg-[#e8a33d]" : "w-1.5 bg-[#3a362f]"
+              }`}
+            />
+          ))}
+        </div>
+
+        <div className="flex items-center gap-2">
+          <button
+            onClick={addSetup}
+            className="w-9 h-9 rounded-full border border-[#34302a] flex items-center justify-center text-[#a8a195] hover:border-[#e8a33d] hover:text-[#e8a33d] transition-colors"
+            title="New card"
+            aria-label="New card"
+          >
+            <Icon name="plus" size={16} />
+          </button>
+          <button
+            onClick={() => goTo(1)}
+            disabled={setups.length < 2}
+            aria-label="Next card"
+            className="w-9 h-9 rounded-full border border-[#34302a] flex items-center justify-center text-[#a8a195] disabled:opacity-30 hover:border-[#e8a33d] hover:text-[#e8a33d] transition-colors"
+          >
+            <Icon name="right" size={16} />
+          </button>
+        </div>
+      </div>
+
+      {/* backup + hint */}
+      <div className="w-full max-w-[520px] mt-6 flex items-center justify-between gap-3">
+        <p className="ls-font-mono text-[10px] text-[#5c574d] tracking-wide">
+          saved in this browser · click a card to flip · ← → to switch
+        </p>
+        <div className="flex items-center gap-3 shrink-0">
+          <button
+            onClick={exportBackup}
+            className="flex items-center gap-1 ls-font-mono text-[10px] text-[#8a8378] hover:text-[#e8a33d] transition-colors"
+          >
+            <Icon name="download" size={11} /> export
+          </button>
+          <button
+            onClick={() => importInputRef.current?.click()}
+            className="flex items-center gap-1 ls-font-mono text-[10px] text-[#8a8378] hover:text-[#e8a33d] transition-colors"
+          >
+            <Icon name="upload" size={11} /> import
+          </button>
+          <input
+            ref={importInputRef}
+            type="file"
+            accept="application/json,.json"
+            className="hidden"
+            onChange={(e) => { importBackup(e.target.files?.[0]); e.target.value = ""; }}
+          />
+        </div>
+      </div>
+
+      <div className="h-6 mt-2" aria-live="polite">
+        {notice && <span className="ls-font-body text-[12px] text-[#e8a33d]">{notice}</span>}
+      </div>
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById("root")).render(<App />);
+</script>
+</body>
+</html>
